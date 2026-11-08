@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EXUS MOBILE | Key Manager</title>
+<style>
+:root{color-scheme:dark;--bg:#080b14;--line:#263247;--muted:#9aa8bd;--accent:#7c5cff;--cyan:#21d4fd}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0%,#1c1740 0,transparent 34%),var(--bg);color:#f4f7ff;font:15px system-ui;padding:22px 14px}
+main{max-width:760px;margin:auto}.brand{display:flex;align-items:center;gap:12px;margin:8px 0 22px}
+.logo{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--cyan));display:grid;place-items:center;font-weight:900;color:#080b14;font-size:19px}
+h1{font-size:21px;margin:0;letter-spacing:1.5px}.brand p{margin:3px 0 0;color:var(--muted);font-size:12px;letter-spacing:2px}
+.card{background:linear-gradient(180deg,#141d2d,#101725);border:1px solid var(--line);border-radius:17px;padding:18px;margin:14px 0}
+label{display:block;color:var(--muted);font-size:13px;margin:12px 0 7px}
+select{width:100%;background:#090f1b;border:1px solid #34435c;border-radius:10px;padding:13px;color:#fff;font:inherit}
+button{border:0;border-radius:10px;padding:12px 15px;font:700 14px system-ui;cursor:pointer}
+.primary{width:100%;margin-top:15px;background:linear-gradient(90deg,var(--accent),#4d8dff);color:white}
+.secondary{background:#26344c;color:#eaf0ff}.danger{background:#42202b;color:#ff9cac}
+.keybox{display:none;margin-top:14px;padding:12px;background:#080f1b;border:1px dashed #52627d;border-radius:10px;word-break:break-all}
+.keybox strong{display:block;color:#b8c8ff;margin-bottom:8px}
+.keyline{display:flex;gap:8px}.keyline code{flex:1;color:#fff}.item{border:1px solid var(--line);border-radius:12px;padding:13px;margin-top:10px;background:#0c1320}
+.itemtop{display:flex;justify-content:space-between}.item code{word-break:break-all}.tag{font-size:11px;padding:4px 8px;border-radius:20px;background:#29234a;color:#c8baff}
+.tag.revoked{background:#48212b;color:#ffadba}.meta{font-size:12px;color:var(--muted);margin:8px 0}.actions{display:flex;gap:8px}.actions button{font-size:12px;padding:8px 10px}
+</style>
+</head>
+<body>
+<main>
+  <header class="brand"><div class="logo">X</div><div><h1>EXUS-MOBILE</h1><p>KEY MANAGER</p></div></header>
+  <section class="card">
+    <h2>Gerar nova Key</h2>
+    <label for="duration">Tipo de Key</label>
+    <select id="duration">
+      <option value="trial">Trial — 3 dias</option>
+      <option value="daily">Diária — 24 horas</option>
+      <option value="weekly">Semanal — 7 dias</option>
+      <option value="permanent">Permanente</option>
+    </select>
+    <button class="primary" id="generate">＋ GERAR KEY</button>
+    <div class="keybox" id="newKey"><strong>KEY GERADA</strong><div class="keyline"><code id="keyText"></code><button class="secondary" id="copy">COPIAR</button></div></div>
+  </section>
+  <section class="card"><h2>Keys geradas</h2><div id="keys">Carregando...</div></section>
+</main>
+<script>
+const API = "/api";
+const ADMIN_TOKEN = prompt("Admin token:") || "";
+const labels = { permanent:"Permanente", daily:"24h", weekly:"7d", trial:"Trial (3d)" };
+const $ = id => document.getElementById(id);
+async function api(path, body) {
+  const r = await fetch(`${API}${path}`, { method: "POST", headers: { "Content-Type": "application/json", "x-admin-token": ADMIN_TOKEN }, body: JSON.stringify(body || {}) });
+  return r.json();
+}
+function fmt(ts){ return ts ? new Date(ts).toLocaleString("pt-BR") : "—"; }
+async function refresh() {
+  const res = await api("/list"); const keys = res.keys || [];
+  if (!keys.length) { $("keys").innerHTML = 'Nenhuma key.'; return; }
+  $("keys").innerHTML = keys.map(k => {
+    const expired = k.expiresAt && Date.now() > k.expiresAt;
+    const status = k.revoked ? "Revogada" : expired ? "Expirada" : "Ativa";
+    return `<article class="item"><div class="itemtop"><code>${k.key}</code><span class="tag ${k.revoked||expired?'revoked':''}">${status}</span></div><div class="meta">${labels[k.type]||k.type} • ${fmt(k.createdAt)}${k.expiresAt?' • Exp: '+fmt(k.expiresAt):''}</div><div class="actions"><button class="secondary" data-copy="${k.key}">Copiar</button>${!k.revoked&&!expired?`<button class="danger" data-revoke="${k.key}">Revogar</button>`:""}</div></article>`;
+  }).join("");
+  $("keys").querySelectorAll("[data-copy]").forEach(b => b.onclick = () => navigator.clipboard.writeText(b.dataset.copy));
+  $("keys").querySelectorAll("[data-revoke]").forEach(b => b.onclick = async () => { if(confirm("Revogar?")) { await api("/revoke", { key: b.dataset.revoke }); refresh(); } });
+}
+$("generate").onclick = async () => {
+  const res = await api("/generate", { type: $("duration").value });
+  if (!res.ok) { alert("Erro: " + res.error); return; }
+  $("keyText").textContent = res.key; $("newKey").style.display = "block"; refresh();
+};
+$("copy").onclick = () => navigator.clipboard.writeText($("keyText").textContent);
+refresh();
+</script>
+</body>
+  </html>
